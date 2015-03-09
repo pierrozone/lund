@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>Map Service for Lund Municipality, Sweden </title> 
+    <script src="http://cdnjs.cloudflare.com/ajax/libs/openlayers/2.12/OpenLayers.js"></script>
+    <link href="http://netdna.bootstrapcdn.com/twitter-bootstrap/2.2.1/css/bootstrap.min.css" rel="stylesheet">
+	<script src="http://twitter.github.com/bootstrap/assets/js/bootstrap.js"></script>
+	<script src="http://maps.google.com/maps/api/js?v=3&amp;sensor=false"></script>
+
+	<style>
+		body {
+            padding-top: 60px;
+            padding-bottom: 40px;
+        }
+        #map {
+            height: 512px;
+            background-color: #eee;
+			border: 1px solid #CCCCCC;
+        }
+	    img.olTileImage {
+			max-width: none;
+		}
+		div.olControlAttribution {
+          left:2px;
+          bottom:2px;
+        }	
+		.olControlScale{
+		  color: #f00;
+		  background-color: #fff;
+		  font-weight: bold;
+		}
+		.addbox{
+		  padding: 10px;
+		  margin: 25px 0 0 20px;
+		  border: 1px solid gray;
+		
+		}
+	</style>
+	</head>
+  <body>
+    <div class="navbar navbar-inverse navbar-fixed-top">
+        <div class="navbar-inner">
+            <div class="container-fluid">
+                <a class="brand" href="/">Lund Municipality Map Service</a>
+            </div>
+        </div>
+    </div>
+    <div class="container-fluid">
+        <div class="row-fluid">
+            <div class="span7">
+                <div id="map">
+				</div>
+            </div>
+            <div class="span4">  
+			  <h1>Address and Coordinates</h1>
+			  <div class ="addbox">
+			    <p><strong>Coordinates: </strong><span id='coordinates'>Awaiting coordinate data</span></p>		  			  
+				<div id = 'summaryLabel'>
+				<table>
+				    <tr>
+					   <td>
+					   <img src="add_icon.png"/></td><td>Click red icon to view building address
+				       </td>
+					</tr>
+			    </table> 
+				</div>              				
+              </div>			
+		    </div>
+        </div>
+	</div>
+  
+    <script type="text/javascript">
+	
+	 var fromProjection = new OpenLayers.Projection('EPSG:4326'); // transform from WGS 1984
+	 var toProjection = new OpenLayers.Projection('EPSG:900913'); // to Spherical Mercator Projection
+	 var map;
+ 
+  // Create map and add controls
+	 map = new OpenLayers.Map('map', {
+		 controls:[
+		   new OpenLayers.Control.Navigation(),
+		   new OpenLayers.Control.PanZoomBar(),
+		   //new OpenLayers.Control.ZoomToExtent(),
+		   new OpenLayers.Control.LayerSwitcher({'ascending':false}),
+		   new OpenLayers.Control.Scale(),
+		   //new OpenLayers.Control.ScaleLine(),
+		   new OpenLayers.Control.MousePosition({
+		   div:document.getElementById("coordinates")
+	       })
+           ],
+		 projection:toProjection,
+	     displayProjection: fromProjection,
+     });
+	 
+	 //GoogleMaps Layers
+	 var google_streets = new OpenLayers.Layer.Google(
+	     "Google Streets", {
+         numZoomLevels: 20	 
+	     }
+	 );
+	 var google_satellite = new OpenLayers.Layer.Google(
+	     "Google Satellite", {
+		 type: google.maps.MapTypeId.SATELLITE,
+		 numZoomLevels: 20
+	     }
+	 );
+	 
+	  var google_physical = new OpenLayers.Layer.Google(
+	     "Google Physical", {
+	     type: google.maps.MapTypeId.TERRAIN,
+		 numZoomLevels: 20
+	     }
+	 );
+	 
+	  var google_hybrid = new OpenLayers.Layer.Google(
+	     "Google Hybrid", {
+	     type: google.maps.MapTypeId.HYBRID,
+		 numZoomLevels: 20
+	     }
+	 );
+	  // Basic OSM from Mapnik renderer
+	//map.addLayer(new OpenLayers.Layer.OSM('Mapnik'));
+
+     var wmsA = new OpenLayers.Layer.WMS(
+		 'Buildings', "http://localhost:8080/geoserver/lund/wms",
+                                 {layers: "lund:LundBuildings", 
+								  transparent:true
+								 },
+                                 {isBaseLayer: false, 
+								  opacity: 1, 
+								  singleTile: true, 
+								  visibility: true
+								 }
+	 );
+	 
+	 var wmsB = new OpenLayers.Layer.WMS(
+		 'Roads', "http://localhost:8080/geoserver/lund/wms",
+                                 {layers: "lund:Lund_roads", 
+								  transparent:true
+								 },
+                                 {isBaseLayer: false, 
+								  opacity: 1, 
+								  singleTile: true, 
+								  visibility: true
+								 }
+	 );
+	 map.addLayers([wmsB, wmsA]);
+	
+	 map.addLayers([google_streets, google_satellite, google_physical, google_hybrid]);
+	 
+	 //Set Style for Address Layer
+	 var addressStyle = new OpenLayers.Style({
+	 externalGraphic: 'add_icon.svg',
+     graphicWidth: 12,
+     graphicHeight: 12,
+     graphicYOffset: 0,
+     });
+	 
+	 //When Address is highlighted
+	 var selectedStyle = new OpenLayers.Style({
+	 externalGraphic: 'add_icon1.svg',
+     graphicWidth: 12,
+     graphicHeight: 12,
+     graphicYOffset: 0,
+     });
+	 
+	 var addressStyleMap = new OpenLayers.StyleMap({'default': addressStyle, 'select': selectedStyle});
+	  
+	  // Define the address points GeoJSON layer
+     var addressLayer = new OpenLayers.Layer.Vector("Address Point", {
+     projection: toProjection,
+     strategies: [new OpenLayers.Strategy.Fixed()],
+     protocol: new OpenLayers.Protocol.HTTP({
+        url: 'addPoints.geojson',
+        format: new OpenLayers.Format.GeoJSON()
+    }),
+    styleMap:addressStyleMap
+    }); 
+	
+	map.addLayer(addressLayer);
+	  
+	  
+	 //Set Center
+	 
+	 map.setCenter(new OpenLayers.LonLat(1468853.20171, 7499669.40366), 16);
+	 
+	//Map Extent
+     var lund = new OpenLayers.Bounds(1460205.410400961,7494106.175765592,1476383.1814075545,7510328.218502053);
+     //map.zoomToExtent(wmsLayer);   
+	 
+	 
+	 // Listen for feature selection and unselection events.
+     selectControl = new OpenLayers.Control.SelectFeature([addressLayer], {
+     onSelect: onFeatureSelect,
+     onUnselect: onFeatureUnselect
+     });
+
+     map.addControl(selectControl);
+     selectControl.activate();
+	 
+	 // Handle the feature selection event by reading attributes and constructing HTML
+  function onFeatureSelect(feature){
+    // Read the feature's attributes and set fallback text if no attribute is returned
+	var cityAddress = feature.attributes.BELADRESS || 'Not available';
+	var xlink = feature.attributes.Y_Meters;
+    var ylink = feature.attributes.X_Meters;
+	var pName = feature.attributes.FASTIGHET || 'None';
+	var aName = feature.attributes.ALTNAMN || 'None';
+    var glink = '<a href="http://maps.google.com/maps?q=N'+ xlink + ',E' + ylink + '" target="_blank" title="Click to view in new window">' + cityAddress + '</a>'	
+
+	document.getElementById('summaryLabel').innerHTML = '<p><strong>Property Name: </strong>' + pName + '<p>'+'<p><strong>Other Name: </strong>' + aName + '<p>'+'<p><strong>Address: </strong>' + glink + '<p>';
+    }
+	
+	// Handle the feature unselection event
+   function onFeatureUnselect(feature){
+   // Set the HTML back to what it was before
+	document.getElementById('summaryLabel').innerHTML = '<table><tr><td><img src="add_icon.png"/></td><td>Click red icon to view building address</td></tr></table>'
+  }	 
+	</script>
+  </body>
+</html>
